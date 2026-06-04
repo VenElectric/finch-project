@@ -70,6 +70,17 @@ app.get("/connect", async (req, res) => {
   }
 });
 
+app.post("/check-access",(req,res) => {
+  console.log("running check acccess")
+  const session = req.body.session_id;
+
+  const stmt = db.prepare(
+    "SELECT access_token from ACCESS where session_id = ?",
+  );
+  const token = stmt.get(session);
+  res.status(200).json({has_token: token !== undefined})
+})
+
 app.get("/redirect", (req, res) => {
   res.sendFile(path.join(__dirname, "./public", "redirect.html"));
 });

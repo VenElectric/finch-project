@@ -10,8 +10,21 @@
   <body>
     <script>
       let session = localStorage.getItem("session_id");
+
       if (session !== null) {
-        window.location.href = "/information";
+        const req = new Request("/check-access", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session }),
+        });
+        fetch(req)
+          .then((res) => res.json())
+          .then((v) => {
+
+            if (v["has_token"]) {
+              window.location.href = "/information";
+            }
+          });
       }
 
       function connect() {
