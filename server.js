@@ -1,9 +1,11 @@
 const express = require("express");
+const path = require("path");
 const app = express();
+const { randomUUID } = require("node:crypto");
 const finch = require("@tryfinch/finch-api");
 const cors = require("cors");
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
+
+const db = require("better-sqlite3")("./db/database.db");
 const jwt = require("jwt-simple");
 const port = 3000;
 const {
@@ -15,35 +17,20 @@ const {
   customer_id,
   crypt_secret,
 } = require("./config.js");
+const { isArrayBuffer } = require("node:util/types");
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cors());
-// need docker to compose both client and server
-// need to configure docker to talk between client and server
-// configure docker dev?????
-// set client url and server url in .env file
+app.use(express.static("public"));
 
-// get access token
-// hash with bcrypt
-// store in sqlite
 
-// maybe we use a simple node server...ugh
-// trying to connect this and vue is a lot for a non-paid gig LOL
-
-// ENV should have
-// - client id
-// - client secret
-// - bcrypt secret
-// - client host
-// - server host
-// - redirect url
-// - customer name
-// - customer id
-
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "./public", "index.html"));
+});
 
 app.get("/connect", async (req, res) => {
-  console.log("running connect")
+  console.log("running connect");
   const client = new finch.Finch({
     clientID: client_id,
     clientSecret: client_secret,
@@ -74,15 +61,19 @@ app.get("/connect", async (req, res) => {
           res.send(reAuth.connect_url);
         }
       } else {
-        res.status(400);
+        res.status(500).send(err["error"]["message"]);
       }
     }
   }
 });
 
+app.get("/redirect", (req, res) => {
+  res.sendFile(path.join(__dirname, "./public", "redirect.html"));
+});
+
 app.post("/access-token", async (req, res) => {
-  console.log("running access token")
-  const code = req.body["code"]; 
+  console.log("running access token");
+  const code = req.body["code"];
 
   const client = new finch.Finch({
     clientId: client_id,
@@ -94,126 +85,199 @@ app.post("/access-token", async (req, res) => {
       client_secret: client_secret,
       code,
     });
-    console.log(access)
-    const db = await open({
-      filename: db_path, // fix these
-      driver: sqlite3.Database,
-    });
 
-    await db.all(
-      "INSERT INTO ACCESS (access_token) VALUES (?)",
+    const session = randomUUID();
+
+    db.prepare("INSERT INTO ACCESS (session_id,access_token) VALUES (?,?)").run(
+      session,
       jwt.encode(access.access_token, crypt_secret),
     );
-    res.status(200).json({entity_ids: access.entity_ids});
+    db.prepare("INSERT INTO ENTITIES (session_id,entity_ids) VALUES(?,?)").run(
+      session,
+      access.entity_ids,
+    );
+
+    res.status(200).json({ session });
   } catch (err) {
-    console.log("there was an error");
-    res.status(400);
+    res.status(500).send(err["error"]["message"]);
   }
 });
 
-app.get("/company", async (req, res) => {
-  console.log("running company")
-  open({
-    filename: db_path, // fix these
-    driver: sqlite3.Database,
-  }).then((db) => {
-    db.get("SELECT * from ACCESS limit 1")
-      .then(({ access_token }) => {
-        const token = `${jwt.decode(access_token, crypt_secret)}`;
-        const client = new finch.Finch({
-          accessToken: token,
-        });
+app.get("/information", (req, res) => {
+  res.sendFile(path.join(__dirname, "./public", "information.html"));
+});
 
-        client.hris.company
-          .retrieve()
-          .then((org) => {
-            res.status(200).json(org);
-          })
-          .catch((err) => {
-            console.log(err);
-            res.status(400);
-            // some error handling
-          });
-      })
-      .catch((err) => console.log("There was an error fetching the DB"));
+app.post("/payment", async (req, res) => {
+  const session = req.body.session_id;
+
+  const stmt = db.prepare(
+    "SELECT access_token from ACCESS where session_id = ?",
+  );
+  const { access_token } = stmt.get(session);
+  const token = `${jwt.decode(access_token, crypt_secret)}`;
+  const client = new finch.Finch({
+    accessToken: token,
   });
+  client.hris.payments
+    .list()
+    .then((payments) => res.status(200))
+    .catch((err) => {
+      if (Reflect.has(err, "error")) {
+        const code = err["error"]["code"];
+        if (code == 403) {
+          res
+            .status(403)
+            .send("Provider has not implemented the directory endpoint.");
+        } else {
+          res.status(code).send(err["error"]["message"]);
+        }
+      }
+    });
+});
+
+app.post("/company", async (req, res) => {
+  console.log("running company");
+  const session = req.body.session_id;
+
+  const stmt = db.prepare(
+    "SELECT access_token from ACCESS where session_id = ?",
+  );
+  const { access_token } = stmt.get(session);
+  const token = `${jwt.decode(access_token, crypt_secret)}`;
+  const client = new finch.Finch({
+    accessToken: token,
+  });
+
+  client.hris.company
+    .retrieve()
+    .then((org) => {
+      res.status(200).json(org);
+    })
+    .catch((err) => {
+      if (Reflect.has(err, "error")) {
+        const code = err["error"]["code"];
+        if (code == 403) {
+          res
+            .status(403)
+            .send("Provider does not implemented company endpoint.");
+        } else {
+          res.status(code).send(err["error"]["message"]);
+        }
+      }
+    });
 });
 
 app.post("/directory", async (req, res) => {
-  console.log("running directory")
-  const ids = req.body.ids
-  console.log("directory ids: ",ids);
-  open({
-    filename: process.env.DB_PATH, // fix these
-    driver: sqlite3.Database,
-  }).then((db) => {
-    db.get("SELECT * from ACCESS limit 1").then(async ({ access_token }) => {
-      const token = `${jwt.decode(access_token, crypt_secret)}`;
-      const client = new finch.Finch({
-        accessToken: token,
-      });
-      const list = []
-
-      for await (const ind of client.hris.directory.list({"entity_ids": ids})){
-        list.push(ind)
-      }
-      res.status(200).json(list)
-    });
+  console.log("running directory");
+  const session = req.body.session_id;
+  const stmt = db.prepare(
+    "SELECT access_token from ACCESS where session_id = ?",
+  );
+  const { access_token } = stmt.get(session);
+  const token = `${jwt.decode(access_token, crypt_secret)}`;
+  const client = new finch.Finch({
+    accessToken: token,
   });
+
+  const entityStmt = db.prepare(
+    "SELECT entity_ids from ENTITIES where session_id = ?",
+  );
+  const result = entityStmt.get(session);
+
+  client.hris.directory
+    .list()
+    .then((entities) => {
+      res.status(200).json(entities.individuals);
+    })
+    .catch((err) => {
+      if (Reflect.has(err, "error")) {
+        const code = err["error"]["code"];
+        if (code == 403) {
+          res
+            .status(403)
+            .send("Provider has not implemented the directory endpoint.");
+        } else {
+          res.status(code).send(err["error"]["message"]);
+        }
+      }
+    });
 });
 
 app.post("/individual", async (req, res) => {
-  console.log("running individual")
+  console.log("running individual");
+  const session = req.body.session_id;
   const id = req.body.id;
-  open({
-    filename: process.env.DB_PATH, // fix these
-    driver: sqlite3.Database,
-  }).then((db) => {
-    db.get("SELECT * from ACCESS limit 1").then(async ({ access_token }) => {
-      const token = `${jwt.decode(access_token, crypt_secret)}`;
-      const client = new finch.Finch({
-        accessToken: token,
-      });
-      const person = await client.hris.individuals.retrieveMany({"entity_ids": [id]})
-      res.status(200).json(person.responses[0])
-    });
+  const stmt = db.prepare(
+    "SELECT access_token from ACCESS where session_id = ?",
+  );
+  const { access_token } = stmt.get(session);
+  const token = `${jwt.decode(access_token, crypt_secret)}`;
+  const client = new finch.Finch({
+    accessToken: token,
   });
+
+  client.hris.individuals
+    .retrieveMany({
+      requests: [{ individual_id: id }],
+    })
+    .then((person) => {
+      res.status(200).json(person.responses[0]);
+    })
+    .catch((err) => {
+      if (Reflect.has(err, "error")) {
+        const code = err["error"]["code"];
+        if (code == 403) {
+          res
+            .status(403)
+            .send("Provider has not implemented the individual endpoint.");
+        } else {
+          res.status(code).send(err["error"]["message"]);
+        }
+      }
+    });
 });
 
-app.get("/employment", async (req, res) => {
-  console.log("running employment")
-  open({
-    filename: process.env.DB_PATH, // fix these
-    driver: sqlite3.Database,
-  }).then((db) => {
-    db.get("SELECT * from ACCESS limit 1").then(({ access_token }) => {
-      const token = `${jwt.decode(access_token, crypt_secret)}`;
-      const client = new finch.Finch({
-        accessToken: token,
-      });
-      client.hris.employments
-        .retrieveMany({ requests: [{ individual_id: "individual_id" }] }) // need to call individuals first here and then gather ids....
-        .then((org) => {
-          res.status(200);
-          res.json(org);
-        })
-        .catch((err) => {
-          console.log(err);
-          res.status(400);
-          // some error handling
-        });
-    });
+app.post("/employment", async (req, res) => {
+  const session = req.body.session_id;
+  const id = req.body.id;
+  const stmt = db.prepare(
+    "SELECT access_token from ACCESS where session_id = ?",
+  );
+  const { access_token } = stmt.get(session);
+  const token = `${jwt.decode(access_token, crypt_secret)}`;
+  const client = new finch.Finch({
+    accessToken: token,
   });
+  client.hris.employments
+    .retrieveMany({ requests: [{ individual_id: id }] }) // need to call individuals first here and then gather ids....
+    .then((org) => {
+      res.status(200).json(org.responses[0]);
+    })
+    .catch((err) => {
+      if (Reflect.has(err, "error")) {
+        const code = err["error"]["code"];
+        if (code == 403) {
+          res
+            .status(403)
+            .send("Provider has not implemented the individual endpoint.");
+        } else {
+          res.status(code).send(err["error"]["message"]);
+        }
+      }
+    });
 });
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
-  open({
-    filename: process.env.DB_PATH,
-    driver: sqlite3.Database,
-  }).then((db) => {
-    db.all(
-      "CREATE TABLE IF NOT EXISTS ACCESS (access_token TEXT)",
-    );
-  });
+
+  db.prepare(
+    "CREATE TABLE IF NOT EXISTS ACCESS (session_id TEXT PRIMARY KEY,access_token TEXT)",
+  ).run();
+
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS ENTITIES (session_id TEXCT,entity_ids BLOB,FOREIGN KEY (session_id) 
+      REFERENCES ACCESS (session_id) 
+         ON DELETE CASCADE 
+         ON UPDATE NO ACTION)`,
+  ).run();
 });

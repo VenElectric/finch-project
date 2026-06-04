@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finch Project</title>
+  </head>
+  <body>
+    <script defer>
+      const session = localStorage.getItem("session_id");
+
+      function errMsg(msg) {
+        alert(msg);
+      }
+
+      function objectToUnorderedList(values, root) {
+        const entries = [...Object.entries(values)];
+        for (const entry of entries) {
+          const [key, value] = entry;
+
+          if (value !== null && value !== undefined) {
+            let item = document.createElement("li");
+
+            if (Array.isArray(value)) {
+              let itemKey = document.createElement("span");
+              itemKey.innerText = key;
+              item.appendChild(itemKey);
+              value.forEach((v) => {
+                let arrList = document.createElement("ul");
+                objectToUnorderedList(v, arrList);
+
+                item.appendChild(arrList);
+              });
+            } else if (typeof value == "object") {
+              let itemKey = document.createElement("span");
+              itemKey.innerText = key;
+              let oList = document.createElement("ul");
+              objectToUnorderedList(value, oList);
+              item.appendChild(itemKey);
+              item.appendChild(oList);
+            } else {
+              item.innerText = `${key}:${value}`;
+            }
+            root.appendChild(item);
+          }
+        }
+      }
+
+      function renderIndividual(id) {
+        const req = new Request("/individual", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session, id }),
+        });
+        fetch(req).then((res) => {
+          if (res.status > 400) {
+            res.text().then((v) => errMsg(v));
+          } else {
+            res.json().then((ind) => {
+              let iview = document.getElementById("information-view");
+
+              if (iview !== null) {
+                iview.innerHTML = "";
+                const pTag = document.createElement("p");
+                pTag.innerText = "Click View Directory To Reset";
+                iview.appendChild(pTag);
+                let list = document.createElement("ul");
+                objectToUnorderedList(ind["body"], list);
+                iview.appendChild(list);
+              }
+            });
+          }
+        });
+      }
+
+      function renderIndividualEmployment(id) {
+        const req = new Request("/employment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session, id }),
+        });
+        fetch(req).then((res) => {
+          if (res.status > 400) {
+            res.text().then((v) => errMsg(v));
+          } else {
+            res.json().then((ind) => {
+              let iview = document.getElementById("information-view");
+
+              if (iview !== null) {
+                iview.innerHTML = "";
+                const pTag = document.createElement("p");
+                pTag.innerText = "Click View Directory To Reset";
+                iview.appendChild(pTag);
+                let list = document.createElement("ul");
+                objectToUnorderedList(ind["body"], list);
+                iview.appendChild(list);
+              }
+            });
+          }
+        });
+      }
+
+      function arrayToAHRefList(values, root) {
+        values.forEach((v) => {
+          let item = document.createElement("li");
+          let btn = document.createElement("button");
+          btn.innerText = "View Individual Data";
+          btn.addEventListener("click", () => renderIndividual(v["id"]));
+          let empBtn = document.createElement("button");
+          empBtn.innerText = "View Employment Data";
+          empBtn.addEventListener("click", () =>
+            renderIndividualEmployment(v["id"]),
+          );
+          item.appendChild(btn);
+          item.appendChild(empBtn);
+
+          const entries = [...Object.entries(v)];
+          for (const entry of entries) {
+            const [key, value] = entry;
+
+            if (value !== null && value !== undefined) {
+              const holdElement = document.createElement("div");
+              if (Array.isArray(value)) {
+                let itemKey = document.createElement("p");
+                itemKey.innerText = key;
+                holdElement.appendChild(itemKey);
+                value.forEach((v) => {
+                  let arrList = document.createElement("ul");
+                  objectToUnorderedList(v, arrList);
+
+                  holdElement.appendChild(arrList);
+                });
+              } else if (typeof value == "object") {
+                let itemKey = document.createElement("span");
+                itemKey.innerText = key;
+                let oList = document.createElement("ul");
+                objectToUnorderedList(value, oList);
+                holdElement.appendChild(itemKey);
+                holdElement.appendChild(oList);
+              } else {
+                holdElement.innerText = `${key}:${value}`;
+              }
+              item.appendChild(holdElement);
+            }
+          }
+          root.appendChild(item);
+        });
+      }
+
+      function renderCompany() {
+        const req = new Request("/company", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session }),
+        });
+        fetch(req).then((res) => {
+          if (res.status >= 400) {
+            res.text().then((v) => errMsg(v));
+          } else {
+            res.json().then((v) => {
+              let iview = document.getElementById("information-view");
+              if (iview !== null) {
+                iview.innerHTML = "";
+                let list = document.createElement("ul");
+                objectToUnorderedList(v, list);
+                iview.appendChild(list);
+              }
+            });
+          }
+        });
+      }
+      function renderDirectory() {
+        const req = new Request("/directory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session }),
+        });
+        fetch(req).then((res) => {
+          if (res.status >= 400) {
+            res.text().then((v) => errMsg(v));
+          } else {
+            res.json().then((v) => {
+              let iview = document.getElementById("information-view");
+
+              if (iview !== null) {
+                iview.innerHTML = "";
+
+                let list = document.createElement("ul");
+                arrayToAHRefList(v, list);
+                iview.appendChild(list);
+              }
+            });
+          }
+        });
+      }
+
+      function testPayment() {
+        const req = new Request("/payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session }),
+        });
+        fetch(req).then((res) => {
+          if (res.status >= 400) {
+            res.text().then((v) => errMsg(v));
+          }
+        });
+      }
+    </script>
+    <button onclick="renderCompany()">View Company Data</button>
+    <button onclick="renderDirectory()">View Directory</button>
+    <div id="information-view"></div>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+
+    <title>Finch Project</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <script>
+      let session = localStorage.getItem("session_id");
+      if (session !== null) {
+        window.location.href = "/information";
+      }
+
+      function connect() {
+        fetch("/connect")
+          .then((res) => res.text())
+          .then((v) => (window.location.href = v));
+      }
+    </script>
+    <button onclick="connect()">Connect via Finch</button>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+services:
+  app:
+    container_name: finch-server
+    stdin_open: true
+    build: 
+      context: .
+    ports:
+      - 3000:3000
+    develop:
+       watch:
+         - action: sync+restart
+           path: .
+           target: /app
+           initial_sync: true
+           ignore:
+             - node_modules/ 

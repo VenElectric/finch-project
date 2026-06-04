@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finch Project</title>
+  </head>
+  <body>
+    <script>
+      const queryParms = new URLSearchParams(window.location.search);
+      const code = queryParms.get("code");
+      const req = new Request("/access-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      fetch(req)
+        .then((res) => res.json())
+        .then(({ session }) => {
+          localStorage.setItem("session_id", session);
+          window.location.href = "/information";
+        });
+    </script>
+
+    <h1>Please Wait...</h1>
+  </body>
+</html>
