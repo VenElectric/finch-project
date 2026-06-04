@@ -64,6 +64,9 @@ app.get("/connect", async (req, res) => {
         res.status(500).send(err["error"]["message"]);
       }
     }
+     else {
+        res.status(500).send("Unhandled error")
+      }
   }
 });
 
@@ -132,6 +135,9 @@ app.post("/payment", async (req, res) => {
           res.status(code).send(err["error"]["message"]);
         }
       }
+       else {
+        res.status(500).send("Unhandled error")
+      }
     });
 });
 
@@ -163,6 +169,9 @@ app.post("/company", async (req, res) => {
         } else {
           res.status(code).send(err["error"]["message"]);
         }
+      }
+       else {
+        res.status(500).send("Unhandled error")
       }
     });
 });
@@ -200,6 +209,9 @@ app.post("/directory", async (req, res) => {
           res.status(code).send(err["error"]["message"]);
         }
       }
+       else {
+        res.status(500).send("Unhandled error")
+      }
     });
 });
 
@@ -234,6 +246,9 @@ app.post("/individual", async (req, res) => {
           res.status(code).send(err["error"]["message"]);
         }
       }
+      else {
+        res.status(500).send("Unhandled error")
+      }
     });
 });
 
@@ -263,6 +278,9 @@ app.post("/employment", async (req, res) => {
         } else {
           res.status(code).send(err["error"]["message"]);
         }
+      }
+       else {
+        res.status(500).send("Unhandled error")
       }
     });
 });
